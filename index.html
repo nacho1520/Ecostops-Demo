@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>EcoStops - Demo</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f9fafb;
+      color: #333;
+    }
+    header {
+      background: #2563eb;
+      color: white;
+      padding: 1rem;
+      text-align: center;
+    }
+    main {
+      padding: 2rem;
+      max-width: 800px;
+      margin: auto;
+    }
+    h2 {
+      margin-bottom: 1rem;
+    }
+    .lines {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .lines button {
+      flex: 1;
+      padding: 1rem;
+      border: none;
+      border-radius: 8px;
+      background: #3b82f6;
+      color: white;
+      font-size: 1.2rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .lines button:hover {
+      background: #1d4ed8;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 0.8rem;
+      text-align: center;
+      border-bottom: 1px solid #eee;
+    }
+    th {
+      background: #f3f4f6;
+      font-weight: bold;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    .status {
+      margin-top: 1rem;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>EcoStops - Ocupación de colectivos en tiempo real</h1>
+  </header>
+  <main>
+    <section id="lineSelection">
+      <h2>Selecciona una línea</h2>
+      <div class="lines" id="linesContainer"></div>
+    </section>
+
+    <section id="busInfo" style="display: none;">
+      <h2 id="lineTitle"></h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Bus ID</th>
+            <th>Ocupación (%)</th>
+            <th>ETA (min)</th>
+          </tr>
+        </thead>
+        <tbody id="busTableBody">
+        </tbody>
+      </table>
+
+      <div id="map" style="width: 100%; height: 400px; margin-top: 1rem; border-radius: 8px; overflow: hidden;"></div>
+
+      <div class="status" id="status">Conectando...</div>
+      <button onclick="backToLines()" style="margin-top: 1rem;">⬅️ Volver al listado</button>
+    </section>
+  </main>
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBJgaifqXhij25Jbou2WFUdA_w8QeItWtw&callback=initMap"></script>
+  <script>
+    let socket;
+    let buses = {};
+    let map;
+    let markers = {};
+    let routePolyline = null;
+
+    function initMap() {
+      map = new google.maps.Map(document.getElementById("map"), {
+        center: { lat: -34.6037, lng: -58.3816 },
+        zoom: 13
+      });
+    }
+
+    async function loadLines() {
+        try {
+            const res = await fetch("https://28rfv29du0.execute-api.us-east-1.amazonaws.com/buses");
+            const { lineas } = await res.json();
+
+            const container = document.getElementById("linesContainer");
+            container.innerHTML = "";
+            lineas.forEach(l => {
+                const btn = document.createElement("button");
+                btn.textContent = `Línea ${l}`;
+                btn.onclick = () => selectLine(l);
+                container.appendChild(btn);
+            });
+        } catch(e) {
+            console.log(e);
+            document.getElementById("linesContainer").innerHTML = "<p>No se pudieron cargar las líneas.</p>";
+        }
+    }
+
+    function selectLine(line) {
+      document.getElementById("lineSelection").style.display = "none";
+      document.getElementById("busInfo").style.display = "block";
+      document.getElementById("lineTitle").textContent = "Línea " + line;
+
+      buses = {};
+      markers = {};
+
+      if(routePolyline) {
+        routePolyline.setMap(null);
+        routePolyline = null;
+      }
+
+      drawRoute(line);
+      connectWebSocket(line);
+    }
+
+    function backToLines() {
+        // Close WS if opened
+        try {
+            socket && socket.close();
+        } catch {}
+        socket = null;
+
+        // Clean UI State
+        buses = {};
+        markers = {};
+        if(routePolyline) {
+          routePolyline.setMap(null);
+          routePolyline = null;
+        }
+
+        document.getElementById("busTableBody").innerHTML = "";
+        document.getElementById("status").textContent = "Conectando...";
+
+        // Show lines again
+        document.getElementById("busInfo").style.display = "none";
+        document.getElementById("lineSelection").style.display = "block";
+    }
+
+    function connectWebSocket(line) {
+      const wsUrl = "wss://duw3ztpri3.execute-api.us-east-1.amazonaws.com/production?line=" + line;
+      socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        document.getElementById("status").textContent = "✅ Conectado";
+      };
+
+      socket.onclose = () => {
+        document.getElementById("status").textContent = "❌ Desconectado";
+      };
+
+      socket.onerror = (err) => {
+        document.getElementById("status").textContent = "⚠️ Error: " + err.message;
+      };
+
+      socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        buses[data.busId] = data;
+        renderTable();
+        renderMarkers();
+      };
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById("busTableBody");
+      tbody.innerHTML = "";
+
+      Object.values(buses).forEach(bus => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${ bus.busId }</td>
+          <td>${ bus.passengers }%</td>
+          <td>${ bus.waitTimeMin ?? '-' }</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderMarkers() {
+      Object.values(buses).forEach(bus => {
+        const pos = { lat: bus.position.lat, lng: bus.position.long };
+
+        if(!markers[bus.busId]) {
+          markers[bus.busId] = new google.maps.Marker({
+            position: pos,
+            map: map,
+            label: bus.busId,
+          });
+        } else {
+          markers[bus.busId].setPosition(pos);
+        }
+      })
+    }
+
+    function drawRoute(line) {
+      const routes = {
+        "12": [
+          { lat: -34.6103, lng: -58.3850 },
+          { lat: -34.6089, lng: -58.3837 },
+          { lat: -34.6075, lng: -58.3828 },
+          { lat: -34.6061, lng: -58.3818 },
+          { lat: -34.6050, lng: -58.3817 },
+          { lat: -34.6037, lng: -58.3816 },
+          { lat: -34.6022, lng: -58.3805 },
+          { lat: -34.6010, lng: -58.3779 },
+          { lat: -34.5994, lng: -58.3736 },
+          { lat: -34.5978, lng: -58.3702 }
+        ],
+        "24": [
+          { lat: -34.5611, lng: -58.4565 },
+          { lat: -34.5662, lng: -58.4483 },
+          { lat: -34.5713, lng: -58.4395 },
+          { lat: -34.5765, lng: -58.4320 },
+          { lat: -34.5802, lng: -58.4285 },
+          { lat: -34.5833, lng: -58.4250 },
+          { lat: -34.5862, lng: -58.4205 },
+          { lat: -34.5880, lng: -58.4170 },
+          { lat: -34.5890, lng: -58.4145 },
+          { lat: -34.5898, lng: -58.4125 },
+          { lat: -34.5915, lng: -58.4100 }
+        ]
+      };
+
+      const path = routes[line];
+      if (!path) return;
+
+      routePolyline = new google.maps.Polyline({
+        path,
+        geodesic: true,
+        strokeColor: "#FF0000",
+        strokeOpacity: 0.8,
+        strokeWeight: 4,
+      });
+
+      routePolyline.setMap(map);
+
+      const bounds = new google.maps.LatLngBounds();
+      path.forEach(p => bounds.extend(p));
+      map.fitBounds(bounds);
+    }
+
+    loadLines();
+  </script>
+</body>
+</html>
