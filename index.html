@@ -101,7 +101,7 @@
       <button onclick="backToLines()" style="margin-top: 1rem;">⬅️ Volver al listado</button>
     </section>
   </main>
-  <script async defer src="https://maps.googleapis.com/maps/api/js?key={APIKEY}&callback=initMap"></script>
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBJgaifqXhij25Jbou2WFUdA_w8QeItWtw&callback=initMap"></script>
   <script>
     let socket;
     let buses = {};
@@ -161,7 +161,10 @@
 
         // Clean UI State
         buses = {};
+
+        Object.values(markers).forEach(m => m.setMap(null));
         markers = {};
+        
         if(routePolyline) {
           routePolyline.setMap(null);
           routePolyline = null;
