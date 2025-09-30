@@ -111,10 +111,10 @@ setInterval(async () => {
 
     bus.posIndex = (bus.posIndex + 1) % route.length;
   }
-}, 15000); // delay fixed to 15s
+}, 10000); // delay fixed to 10s
 
 // Stop simulation after 5 minutes
-setTimeout(() => {
-  console.log("Simulation finished.");
-  process.exit(0);
-}, 5 * 60 * 1000);
+// setTimeout(() => {
+//   console.log("Simulation finished.");
+//   process.exit(0);
+// }, 5 * 60 * 1000);

@@ -25,25 +25,56 @@
     h2 {
       margin-bottom: 1rem;
     }
+    
+    .line-section {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+    }
     .lines {
       display: flex;
-      gap: 1rem;
+      flex-direction: column; /* ahora en columna */
+      gap: 0.5rem;
       margin-bottom: 2rem;
+      align-items: center; /* centrar los botones */
     }
+
     .lines button {
-      flex: 1;
-      padding: 1rem;
+      width: 200px;          /* ancho fijo más chico */
+      padding: 0.6rem 1rem;  /* menos padding */
       border: none;
-      border-radius: 8px;
+      border-radius: 6px;
       background: #3b82f6;
       color: white;
-      font-size: 1.2rem;
+      font-size: 1rem;       /* más pequeño */
       cursor: pointer;
-      transition: background 0.2s;
+      transition: background 0.2s, transform 0.1s;
     }
+
     .lines button:hover {
       background: #1d4ed8;
+      transform: scale(1.05); /* leve efecto al pasar */
     }
+
+    .bus-animation {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .bus-animation img {
+      width: 500px;
+      animation: floatBus 3s ease-in-out infinite;
+    }
+    @keyframes floatBus {
+      0%, 100% {
+        transform: translateY(0);
+      }
+      50% {
+        transform: translateY(-12px);
+      }
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -69,6 +100,17 @@
       margin-top: 1rem;
       font-style: italic;
     }
+    .previous {
+      background-color: #f1f1f1;
+      color: black;
+      border: none;
+      cursor: pointer;
+      width: 20px;
+      height: 20px;
+    }
+    .round {
+      border-radius: 50%;
+    }
   </style>
 </head>
 <body>
@@ -77,18 +119,24 @@
   </header>
   <main>
     <section id="lineSelection">
-      <h2>Selecciona una línea</h2>
-      <div class="lines" id="linesContainer"></div>
+      <div class="line-section">
+        <section style="display: flex; flex-direction: column; align-items: flex-start;">
+          <h2>Selecciona una línea</h2>
+          <div class="lines" id="linesContainer"></div>
+        </section>
+      </div>
     </section>
 
     <section id="busInfo" style="display: none;">
+      
+      <button onclick="backToLines()" class="previous round">&#8249;</button>
       <h2 id="lineTitle"></h2>
       <table>
         <thead>
           <tr>
             <th>Bus ID</th>
             <th>Ocupación (%)</th>
-            <th>ETA (min)</th>
+            <th>Tiempo de arribo (min)</th>
           </tr>
         </thead>
         <tbody id="busTableBody">
@@ -98,10 +146,9 @@
       <div id="map" style="width: 100%; height: 400px; margin-top: 1rem; border-radius: 8px; overflow: hidden;"></div>
 
       <div class="status" id="status">Conectando...</div>
-      <button onclick="backToLines()" style="margin-top: 1rem;">⬅️ Volver al listado</button>
     </section>
   </main>
-  <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBJgaifqXhij25Jbou2WFUdA_w8QeItWtw&callback=initMap"></script>
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key={API_KEY}&callback=initMap"></script>
   <script>
     let socket;
     let buses = {};
@@ -183,15 +230,15 @@
       socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
-        document.getElementById("status").textContent = "✅ Conectado";
+        document.getElementById("status").textContent = "Conectado";
       };
 
       socket.onclose = () => {
-        document.getElementById("status").textContent = "❌ Desconectado";
+        document.getElementById("status").textContent = "Desconectado";
       };
 
       socket.onerror = (err) => {
-        document.getElementById("status").textContent = "⚠️ Error: " + err.message;
+        document.getElementById("status").textContent = "Error: " + err.message;
       };
 
       socket.onmessage = (event) => {
